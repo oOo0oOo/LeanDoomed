@@ -10,8 +10,8 @@ input_file sdl.c where
 target sdl.o pkg : FilePath := do
   let srcJob ← sdl.c.fetch
   let oFile := pkg.buildDir / "c" / "sdl.o"
-  let leanInclude := "/home/ooo/.elan/toolchains/leanprover--lean4---v4.22.0/include"
-  buildO oFile srcJob #[] #["-fPIC", "-I/usr/include/SDL2", "-D_REENTRANT", s!"-I{leanInclude}"] "cc"
+  let leanInclude := "/home/sraya/.elan/toolchains/leanprover--lean4---v4.22.0/include"
+  buildO oFile srcJob #[] #["-fPIC", "-I/usr/local/include/SDL2", "-D_REENTRANT", s!"-I{leanInclude}"] "cc"
 
 target libleansdl pkg : FilePath := do
   let sdlO ← sdl.o.fetch
@@ -27,4 +27,4 @@ lean_lib Engine
 @[default_target]
 lean_exe LeanDoomed where
   root := `Main
-  moreLinkArgs := #["/usr/lib/x86_64-linux-gnu/libSDL2.so", "/usr/lib/x86_64-linux-gnu/libSDL2_image.so"]
+  moreLinkArgs := #["/usr/local/lib/libSDL2.so", "/usr/local/lib/libSDL2_image.so", "-Wl,--allow-shlib-undefined", "-Wl,-rpath=/usr/local/lib/"]

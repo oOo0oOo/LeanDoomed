@@ -175,11 +175,12 @@ partial def run : IO Unit := do
     SDL.quit
     return
 
+/-
   unless (← SDL.createRenderer 4294967295 SDL.SDL_RENDERER_ACCELERATED) != 0 do
     IO.println "Failed to create renderer"
     SDL.quit
     return
-
+-/
   let initialState : EngineState := {
     deltaTime := 0.0, lastTime := 0, running := true,
     camera := { x := 1.5, y := 1.5, angle := 0.0 },
