@@ -11,8 +11,8 @@ target sdl.o pkg : FilePath := do
   let srcJob ← sdl.c.fetch
   let oFile := pkg.buildDir / "c" / "sdl.o"
   let leanInclude := (<- getLeanIncludeDir).toString
-  let sdlInclude := "SDL/include/"
-  let sdlImageInclude := "SDL_image/include/"
+  let sdlInclude := "vendor/SDL/include/"
+  let sdlImageInclude := "vendor/SDL_image/include/"
   buildO oFile srcJob #[] #["-fPIC", s!"-I{sdlInclude}", s!"-I{sdlImageInclude}", "-D_REENTRANT", s!"-I{leanInclude}", s!"-I{sdlInclude}", s!"-I{sdlImageInclude}"] "cc"
 
 target libleansdl pkg : FilePath := do
@@ -29,4 +29,5 @@ lean_lib Engine
 @[default_target]
 lean_exe LeanDoomed where
   root := `Main
-  moreLinkArgs := #["SDL/build/libSDL3.so", "SDL_image/build/libSDL3_image.so", "-Wl,--allow-shlib-undefined", "-Wl,-rpath=SDL/build/", "-Wl,-rpath=SDL_image/build/"]
+  -- we have to add the rpath to tell the compiler where all of the libraries are
+  moreLinkArgs := #["vendor/SDL/build/libSDL3.so", "vendor/SDL_image/build/libSDL3_image.so", "-Wl,--allow-shlib-undefined", "-Wl,-rpath=vendor/SDL/build/", "-Wl,-rpath=vendor/SDL_image/build/"]

@@ -1,4 +1,4 @@
-cd SDL
+cd vendor/SDL
 cmake -S . -B build
 cmake --build build
 cd ../SDL_image
