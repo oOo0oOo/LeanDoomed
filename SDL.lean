@@ -21,10 +21,10 @@ opaque init : UInt32 → IO UInt32
 opaque quit : IO Unit
 
 @[extern "sdl_create_window"]
-opaque createWindow : String → Int32 → Int32 → Int32 → Int32 → UInt32 → IO UInt32
+opaque createWindow : String → Int32 → Int32 → UInt32 → IO UInt32
 
 @[extern "sdl_create_renderer"]
-opaque createRenderer : UInt32 → UInt32 → IO UInt32
+opaque createRenderer : Unit → IO UInt32
 
 @[extern "sdl_set_render_draw_color"]
 opaque setRenderDrawColor : UInt8 → UInt8 → UInt8 → UInt8 → IO Int32

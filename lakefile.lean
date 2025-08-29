@@ -10,8 +10,10 @@ input_file sdl.c where
 target sdl.o pkg : FilePath := do
   let srcJob ← sdl.c.fetch
   let oFile := pkg.buildDir / "c" / "sdl.o"
-  let leanInclude := "/home/sraya/.elan/toolchains/leanprover--lean4---v4.22.0/include"
-  buildO oFile srcJob #[] #["-fPIC", "-I/usr/local/include/SDL2", "-D_REENTRANT", s!"-I{leanInclude}"] "cc"
+  let leanInclude := (<- getLeanIncludeDir).toString
+  let sdlInclude := "SDL/include/"
+  let sdlImageInclude := "SDL_image/include/"
+  buildO oFile srcJob #[] #["-fPIC", s!"-I{sdlInclude}", s!"-I{sdlImageInclude}", "-D_REENTRANT", s!"-I{leanInclude}", s!"-I{sdlInclude}", s!"-I{sdlImageInclude}"] "cc"
 
 target libleansdl pkg : FilePath := do
   let sdlO ← sdl.o.fetch
@@ -20,11 +22,11 @@ target libleansdl pkg : FilePath := do
 
 lean_lib SDL where
   moreLinkObjs := #[libleansdl]
-  moreLinkArgs := #["-lSDL2", "-lSDL2_image"]
+  moreLinkArgs := #["-lSDL3", "-lSDL3_image"]
 
 lean_lib Engine
 
 @[default_target]
 lean_exe LeanDoomed where
   root := `Main
-  moreLinkArgs := #["/usr/local/lib/libSDL2.so", "/usr/local/lib/libSDL2_image.so", "-Wl,--allow-shlib-undefined", "-Wl,-rpath=/usr/local/lib/"]
+  moreLinkArgs := #["SDL/build/libSDL3.so", "SDL_image/build/libSDL3_image.so", "-Wl,--allow-shlib-undefined", "-Wl,-rpath=SDL/build/", "-Wl,-rpath=SDL_image/build/"]
