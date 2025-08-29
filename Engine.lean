@@ -175,12 +175,12 @@ partial def run : IO Unit := do
     SDL.quit
     return
 
-/-
-  unless (← SDL.createRenderer) != 0 do
+
+  unless (← SDL.createRenderer ()) != 0 do
     IO.println "Failed to create renderer"
     SDL.quit
     return
--/
+
 
   let initialState : EngineState := {
     deltaTime := 0.0, lastTime := 0, running := true,
