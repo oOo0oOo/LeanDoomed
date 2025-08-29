@@ -1,6 +1,6 @@
-# Lean SDL2 Bindings Example
+# Lean SDL3 Bindings Example
 
-Playing around with SDL2 bindings in Lean4 to learn about the FFI.
+Playing around with SDL3 bindings in Lean4 to learn about the FFI.
 
 Simple real-time Doom-style raycasting engine in Lean4:
 
@@ -8,9 +8,16 @@ Simple real-time Doom-style raycasting engine in Lean4:
 
 ## Run
 
-This is just an experiment and the build is currently specific to my system (Ubuntu 24.04.2).
+This is just an experiment and the build is currently specific to Linux only
 
-**You need to install dependencies and adjust paths in lakefile.lean!**
+make sure you run the build script first to build all the dependencies to get this to work
+
+```bash
+chmod +x ./build_sdl_and_friends.sh
+sudo ./build_sdl_and_friends.sh
+```
+
+Then you can run the game proper
 
 ```bash
 lake exe LeanDoomed
