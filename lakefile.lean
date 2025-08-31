@@ -30,4 +30,7 @@ lean_lib Engine
 lean_exe LeanDoomed where
   root := `Main
   -- we have to add the rpath to tell the compiler where all of the libraries are
-  moreLinkArgs := #["vendor/SDL/build/libSDL3.so", "vendor/SDL_image/build/libSDL3_image.so", "-Wl,--allow-shlib-undefined", "-Wl,-rpath=vendor/SDL/build/", "-Wl,-rpath=vendor/SDL_image/build/"]
+  moreLinkArgs := if Platform.isWindows then
+    #["vendor/SDL/build/SDL3.dll", "vendor/SDL_image/build/SDL3_image.dll", "-Wl,-rpath=vendor/SDL/build/", "-Wl,-rpath=vendor/SDL_image/build/"]
+  else
+    #["vendor/SDL/build/libSDL3.so", "vendor/SDL_image/build/libSDL3_image.so", "-Wl,--allow-shlib-undefined", "-Wl,-rpath=vendor/SDL/build/", "-Wl,-rpath=vendor/SDL_image/build/"]
