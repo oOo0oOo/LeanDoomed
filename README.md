@@ -11,8 +11,13 @@ Simple real-time Doom-style raycasting engine in Lean4:
 This is just an experiment
 
 First, make sure you've set up Lean properly on your computer.
+
 If you are on Windows, use MSYS2 or WSL 
+
 IMPORTANT: FOR MSYS2, MAKE SURE YOU ARE USING THE "CLANG" SHELL TO RUN EVERYTHING
+
+(For more information on MSYS2, see: https://github.com/leanprover/lean4/blob/master/doc/make/msys2.md)
+
 Follow the "legacy" instructions from here (They should work on Linux, WSL, and MSYS2): https://leanprover-community.github.io/install/linux.html
 
 Second, make sure you run the build script first to build all the dependencies to get this to work
