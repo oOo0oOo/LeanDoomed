@@ -18,10 +18,20 @@ target sdl.o pkg : FilePath := do
 target libleansdl pkg : FilePath := do
   let sdlO ← sdl.o.fetch
   let name := nameToStaticLib "leansdl"
+  -- manually copy the DLLs we need to .lake/build/bin/ for the game to work
   if Platform.isWindows then
-    -- manually copy the DLLs we need to .lake/build/bin/ for the game to work
     copyFile "vendor/SDL/build/SDL3.dll" ".lake/build/bin/SDL3.DLL"
     copyFile "vendor/SDL_image/build/SDL3_image.dll" ".lake/build/bin/SDL3_image.DLL"
+  else
+    copyFile "vendor/SDL/build/libSDL_uclibc.a" ".lake/build/bin/libSDL_uclibc.a"
+    copyFile "vendor/SDL/build/libSDL3.so" ".lake/build/bin/libSDL3.so"
+    copyFile "vendor/SDL/build/libSDL3.so.0" ".lake/build/bin/libSDL3.so.0"
+    copyFile "vendor/SDL/build/libSDL3.so.0.3.0" ".lake/build/bin/libSDL3.so.0.3.0"
+    copyFile "vendor/SDL_image/build/libSDL3_image.so" ".lake/build/bin/libSDL3_image.so"
+    copyFile "vendor/SDL_image/build/libSDL3_image.so.0" ".lake/build/bin/libSDL3_image.so.0"
+    copyFile "vendor/SDL_image/build/libSDL3_image.so.0.3.0" ".lake/build/bin/libSDL3_image.so.0.3.0"
+    copyFile "vendor/SDL_image/build/dummy.sym" ".lake/build/bin/dummy.sym"
+    copyFile "vendor/SDL_image/build/sdl3-image.pc" ".lake/build/bin/sdl3-image.pc"
   buildStaticLib (pkg.staticLibDir / name) #[sdlO]
 
 lean_lib SDL where
@@ -35,6 +45,6 @@ lean_exe LeanDoomed where
   root := `Main
   -- we have to add the rpath to tell the compiler where all of the libraries are
   moreLinkArgs := if Platform.isWindows then
-    #["vendor/SDL/build/SDL3.dll", "vendor/SDL_image/build/SDL3_image.dll"]
+    #[]
   else
-    #["vendor/SDL/build/libSDL3.so", "vendor/SDL_image/build/libSDL3_image.so", "-Wl,--allow-shlib-undefined", "-Wl,-rpath=vendor/SDL/build/", "-Wl,-rpath=vendor/SDL_image/build/"]
+     #["vendor/SDL/build/libSDL3.so", "vendor/SDL_image/build/libSDL3_image.so", "-Wl,--allow-shlib-undefined", "-Wl,-rpath=vendor/SDL/build/", "-Wl,-rpath=vendor/SDL_image/build/"]
