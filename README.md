@@ -6,6 +6,10 @@ Simple real-time Doom-style raycasting engine in Lean4:
 
 ![Screenshot](screenshots/screenshot1.png)
 
+## Cloning
+
+When you clone, MAKE SURE YOU RUN ``git submodule update --init --recursive`` IN THE ROOT OF THIS REPOSITORY JUST TO BE SAFE
+
 ## Run
 
 This is just an experiment
