@@ -13,7 +13,7 @@ target sdl.o pkg : FilePath := do
   let leanInclude := (<- getLeanIncludeDir).toString
   let sdlInclude := "vendor/SDL/include/"
   let sdlImageInclude := "vendor/SDL_image/include/"
-  buildO oFile srcJob #[] #["-fPIC", s!"-I{sdlInclude}", s!"-I{sdlImageInclude}", "-D_REENTRANT", s!"-I{leanInclude}", s!"-I{sdlInclude}", s!"-I{sdlImageInclude}"] "cc"
+  buildO oFile srcJob #[] #["-fPIC", s!"-I{sdlInclude}", s!"-I{sdlImageInclude}", "-D_REENTRANT", s!"-I{leanInclude}"] "cc"
 
 target libleansdl pkg : FilePath := do
   let sdlO ← sdl.o.fetch
@@ -22,16 +22,6 @@ target libleansdl pkg : FilePath := do
   if Platform.isWindows then
     copyFile "vendor/SDL/build/SDL3.dll" ".lake/build/bin/SDL3.DLL"
     copyFile "vendor/SDL_image/build/SDL3_image.dll" ".lake/build/bin/SDL3_image.DLL"
-  else
-    copyFile "vendor/SDL/build/libSDL_uclibc.a" ".lake/build/bin/libSDL_uclibc.a"
-    copyFile "vendor/SDL/build/libSDL3.so" ".lake/build/bin/libSDL3.so"
-    copyFile "vendor/SDL/build/libSDL3.so.0" ".lake/build/bin/libSDL3.so.0"
-    copyFile "vendor/SDL/build/libSDL3.so.0.3.0" ".lake/build/bin/libSDL3.so.0.3.0"
-    copyFile "vendor/SDL_image/build/libSDL3_image.so" ".lake/build/bin/libSDL3_image.so"
-    copyFile "vendor/SDL_image/build/libSDL3_image.so.0" ".lake/build/bin/libSDL3_image.so.0"
-    copyFile "vendor/SDL_image/build/libSDL3_image.so.0.3.0" ".lake/build/bin/libSDL3_image.so.0.3.0"
-    copyFile "vendor/SDL_image/build/dummy.sym" ".lake/build/bin/dummy.sym"
-    copyFile "vendor/SDL_image/build/sdl3-image.pc" ".lake/build/bin/sdl3-image.pc"
   buildStaticLib (pkg.staticLibDir / name) #[sdlO]
 
 lean_lib SDL where
@@ -47,4 +37,4 @@ lean_exe LeanDoomed where
   moreLinkArgs := if Platform.isWindows then
     #[]
   else
-     #["vendor/SDL/build/libSDL3.so", "vendor/SDL_image/build/libSDL3_image.so", "-Wl,--allow-shlib-undefined", "-Wl,-rpath=vendor/SDL/build/", "-Wl,-rpath=vendor/SDL_image/build/"]
+    #["vendor/SDL/build/libSDL3.so", "vendor/SDL_image/build/libSDL3_image.so", "-Wl,--allow-shlib-undefined", "-Wl,-rpath=vendor/SDL/build/", "-Wl,-rpath=vendor/SDL_image/build/"]
