@@ -23,8 +23,12 @@ target libleansdl pkg : FilePath := do
   if Platform.isWindows then
     copyFile "vendor/SDL/build/SDL3.dll" ".lake/build/bin/SDL3.DLL"
     copyFile "vendor/SDL_image/build/SDL3_image.dll" ".lake/build/bin/SDL3_image.DLL"
-    let lakeBinariesDir ← getLakeLibDir
+    let lakeBinariesDir := (← IO.appPath).parent.get!
     println! "Copying Lake DLLs from {lakeBinariesDir}"
+
+    for entry in (← lakeBinariesDir.readDir) do
+      if entry.path.extension == some "dll" then
+       copyFile entry.path (".lake/build/bin/" / entry.path.fileName.get!)
 
   buildStaticLib (pkg.staticLibDir / name) #[sdlO]
 
