@@ -19,9 +19,13 @@ target libleansdl pkg : FilePath := do
   let sdlO ← sdl.o.fetch
   let name := nameToStaticLib "leansdl"
   -- manually copy the DLLs we need to .lake/build/bin/ for the game to work
+  IO.FS.createDirAll ".lake/build/bin/"
   if Platform.isWindows then
     copyFile "vendor/SDL/build/SDL3.dll" ".lake/build/bin/SDL3.DLL"
     copyFile "vendor/SDL_image/build/SDL3_image.dll" ".lake/build/bin/SDL3_image.DLL"
+    let lakeBinariesDir ← getLakeLibDir
+    println! "Copying Lake DLLs from {lakeBinariesDir}"
+
   buildStaticLib (pkg.staticLibDir / name) #[sdlO]
 
 lean_lib SDL where
