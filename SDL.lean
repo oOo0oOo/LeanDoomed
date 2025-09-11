@@ -50,4 +50,10 @@ opaque getTicks : IO UInt32
 @[extern "sdl_get_key_state"]
 opaque getKeyState : UInt32 → IO Bool
 
+@[extern "sdl_load_texture"]
+opaque loadTexture : String → IO UInt32
+
+@[extern "sdl_render_texture_column"]
+opaque renderTextureColumn : Int32 → Int32 → Int32 → Int32 → Int32 → Int32 → IO Int32
+
 end SDL

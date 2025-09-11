@@ -5,12 +5,7 @@
 
 static SDL_Window* g_window = NULL;
 static SDL_Renderer* g_renderer = NULL;
-
-uint32_t sdl_get_version(void) {
-    // from https://wiki.libsdl.org/SDL3/SDL_GetVersion
-    const int linked = SDL_GetVersion();  /* reported by linked SDL library */
-    return SDL_VERSIONNUM_MAJOR(linked) * 100 + SDL_VERSIONNUM_MINOR(linked) * 10 + SDL_VERSIONNUM_MICRO(linked);
-}
+static SDL_Texture* g_wall_texture = NULL;
 
 lean_obj_res sdl_init(uint32_t flags, lean_obj_arg w) {
     int32_t result = SDL_Init(flags);
@@ -18,6 +13,10 @@ lean_obj_res sdl_init(uint32_t flags, lean_obj_arg w) {
 }
 
 lean_obj_res sdl_quit(lean_obj_arg w) {
+    if (g_wall_texture) {
+        SDL_DestroyTexture(g_wall_texture);
+        g_wall_texture = NULL;
+    }
     if (g_renderer) {
         SDL_DestroyRenderer(g_renderer);
         g_renderer = NULL;
@@ -98,4 +97,39 @@ lean_obj_res sdl_get_key_state(uint32_t scancode, lean_obj_arg w) {
     const uint8_t* state = SDL_GetKeyboardState(NULL);
     uint8_t pressed = state[scancode];
     return lean_io_result_mk_ok(lean_box(pressed));
+}
+
+// TEXTURE SUPPORT
+// Assuming 64x64 texture
+lean_obj_res sdl_load_texture(lean_obj_arg filename, lean_obj_arg w) {
+    const char* filename_str = lean_string_cstr(filename);
+    SDL_Surface* surface = IMG_Load(filename_str);
+    if (!surface) {
+        SDL_Log("C: Failed to load texture: %s\n", SDL_GetError());
+        return lean_io_result_mk_ok(lean_box(0));
+    }
+
+    if (g_wall_texture) SDL_DestroyTexture(g_wall_texture);
+    g_wall_texture = SDL_CreateTextureFromSurface(g_renderer, surface);
+    SDL_DestroySurface(surface);
+
+    if (!g_wall_texture) {
+        SDL_Log("C: Failed to create texture: %s\n", SDL_GetError());
+        return lean_io_result_mk_ok(lean_box(0));
+    }
+
+    return lean_io_result_mk_ok(lean_box(1));
+}
+
+lean_obj_res sdl_render_texture_column(uint32_t dst_x, uint32_t dst_y, uint32_t dst_height, uint32_t src_x, uint32_t src_y_start, uint32_t src_y_end, lean_obj_arg w) {
+    if (!g_renderer || !g_wall_texture) return lean_io_result_mk_ok(lean_box_uint32(-1));
+
+    uint32_t tex_y_start = src_y_start >= 64 ? 0 : src_y_start;
+    uint32_t tex_y_end = src_y_end > 64 ? 64 : src_y_end;
+    if (tex_y_end <= tex_y_start) tex_y_end = tex_y_start + 1;
+
+    SDL_FRect src_rect = {(float)(src_x % 64), (float)tex_y_start, 1.0f, (float)(tex_y_end - tex_y_start)};
+    SDL_FRect dst_rect = {(float)dst_x, (float)dst_y, 1.0f, (float)dst_height};
+
+    return lean_io_result_mk_ok(lean_box_uint32(SDL_RenderTexture(g_renderer, g_wall_texture, &src_rect, &dst_rect)));
 }

@@ -27,6 +27,7 @@ structure EngineState where
 def SCREEN_WIDTH : Int32 := 1280
 def SCREEN_HEIGHT : Int32 := 720
 def FOV : Float := 1.047 -- ~60 degrees in radians
+def TEXTURE_SIZE : Float := 64.0
 
 def sampleMap : Map := #[
   #[1,1,1,1,1,1,1,1,1,1],
@@ -57,7 +58,7 @@ def isWall (mapp : Map) (x y : Float) : Bool :=
     let mapY := y.floor.toUInt32.toNat
     mapY >= mapp.size || mapX >= mapp[mapY]!.size || mapp[mapY]![mapX]! == 1
 
-def castRay (map : Map) (startX startY angle : Float) : Float := Id.run do
+def castRay (map : Map) (startX startY angle : Float): Float × Float := Id.run do
   let rayDirX := Float.cos angle
   let rayDirY := Float.sin angle
   let mut mapX := startX.floor
@@ -87,9 +88,16 @@ def castRay (map : Map) (startX startY angle : Float) : Float := Id.run do
 
     hit := isWall map mapX mapY
 
-  if side == 0
-  then (mapX - startX + (1.0 - Float.ofInt stepX) / 2.0) / rayDirX
-  else (mapY - startY + (1.0 - Float.ofInt stepY) / 2.0) / rayDirY
+  let distance := if side == 0
+    then (mapX - startX + (1.0 - Float.ofInt stepX) / 2.0) / rayDirX
+    else (mapY - startY + (1.0 - Float.ofInt stepY) / 2.0) / rayDirY
+
+  let wallX := if side == 0
+    then startY + distance * rayDirY
+    else startX + distance * rayDirX
+
+  let texX := (wallX - wallX.floor) * TEXTURE_SIZE
+  (distance, texX)
 
 def updateCamera (camera : Camera) (deltaTime : Float) : IO Camera := do
   let moveSpeed := camera.speed * deltaTime
@@ -115,35 +123,37 @@ def fillRect (x y w h : Int32) : IO Unit :=
   SDL.renderFillRect x y w h *> pure ()
 
 def renderScene (state : EngineState) : IO Unit := do
-  setColor { r := 87, g := 127, b := 137 }
+  setColor { r := 135, g := 206, b := 235 }
   let _ ← SDL.renderClear
 
-  let camera := state.camera
-  let rayAngleStep := FOV / SCREEN_WIDTH.toFloat
-
+  let rayStep := FOV / SCREEN_WIDTH.toFloat
   for column in [0:SCREEN_WIDTH.toNatClampNeg] do
-    let rayAngle := camera.angle - FOV/2 + column.toFloat * rayAngleStep
-    let distance := max 0.1 (castRay state.gameMap camera.x camera.y rayAngle)
-    let wallHeight := (SCREEN_HEIGHT.toFloat / distance) * 1.5
+    let rayAngle := state.camera.angle - FOV/2 + column.toFloat * rayStep
+    let (distance, texX) := castRay state.gameMap state.camera.x state.camera.y rayAngle
+    let wallHeight := (SCREEN_HEIGHT.toFloat / max 0.1 distance) * 1.5
 
-    let wallStart := max 0 ((SCREEN_HEIGHT.toFloat - wallHeight) / 2).toInt32
-    let wallEnd := min (SCREEN_HEIGHT - 1) (wallStart + wallHeight.toInt32)
-    let xPos := column.toInt32
+    let wallStart := (SCREEN_HEIGHT.toFloat - wallHeight) / 2
+    let visibleStart := max 0 wallStart
+    let visibleEnd := min SCREEN_HEIGHT.toFloat (wallStart + wallHeight)
 
-    if wallStart > 0 then
-      setColor { r := 135, g := 206, b := 235 }
-      fillRect xPos 0 1 wallStart
+    let wallStartInt := visibleStart.toInt32
+    let wallEndInt := visibleEnd.toInt32
+    let wallHeightInt := wallEndInt - wallStartInt
 
-    if wallStart < wallEnd then
-      let lightIntensity := max 0.3 (1.0 - distance / 8.0)
-      let col := (200.0 * lightIntensity).toUInt8
-      setColor { r := col, g := col, b := col + 20 }
-      fillRect xPos wallStart 1 (wallEnd - wallStart)
+    if wallHeightInt > 0 then
+      let (texYStart, texYEnd) :=
+        if wallHeight <= SCREEN_HEIGHT.toFloat then (0, TEXTURE_SIZE.toInt32)
+        else
+          let zoom := wallHeight / SCREEN_HEIGHT.toFloat
+          let visible := TEXTURE_SIZE / zoom
+          let start := 0.5 + (TEXTURE_SIZE - visible) / 2
+          (start.toInt32, (start + visible).toInt32)
 
-    if wallEnd < SCREEN_HEIGHT - 1 then
-      let floorShade := max 20 (60 - distance * 5).toUInt8
-      setColor { r := floorShade, g := floorShade + 30, b := floorShade }
-      fillRect xPos wallEnd 1 (SCREEN_HEIGHT - 1 - wallEnd)
+      let _ ← SDL.renderTextureColumn column.toInt32 wallStartInt wallHeightInt texX.toInt32 texYStart texYEnd
+
+    let shade := max 20 (50 - distance * 5).toUInt8
+    setColor { r := shade, g := shade + 30, b := shade }
+    fillRect column.toInt32 wallEndInt 1 (SCREEN_HEIGHT - wallEndInt)
 
 private def updateEngineState (engineState : IO.Ref EngineState) : IO Unit := do
   let state ← engineState.get
@@ -175,12 +185,13 @@ partial def run : IO Unit := do
     SDL.quit
     return
 
-
   unless (← SDL.createRenderer ()) != 0 do
     IO.println "Failed to create renderer"
     SDL.quit
     return
 
+  unless (← SDL.loadTexture "wall.png") != 0 do
+    IO.println "Failed to load texture, using solid colors"
 
   let initialState : EngineState := {
     deltaTime := 0.0, lastTime := 0, running := true,

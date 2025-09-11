@@ -36,6 +36,8 @@ For more information on MSYS2, see: https://github.com/leanprover/lean4/blob/mas
 
 Next, follow the instructions for Unix above.
 
-## License
+## License & Attribution
 
 MIT
+
+Wall texture by [FacadeGaikan](https://opengameart.org/node/31075), licensed under CC0.
