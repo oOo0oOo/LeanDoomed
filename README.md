@@ -15,7 +15,7 @@ Simple real-time Doom-style raycasting engine in Lean4:
 curl https://elan.lean-lang.org/elan-init.sh -sSf | sh
 
 # Clone project and submodules (SDL3 etc)
-git clone --recurse-submodules https://github.com/ValorZard/LeanDoomed.git
+git clone --recurse-submodules https://github.com/oOo0oOo/LeanDoomed.git
 cd LeanDoomed
 
 # Build dependencies
