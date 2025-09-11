@@ -1,15 +1,15 @@
 #include <stdint.h>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_image.h>
+#include <SDL3/SDL.h>
+#include <SDL3_image/SDL_image.h>
 #include <lean/lean.h>
 
 static SDL_Window* g_window = NULL;
 static SDL_Renderer* g_renderer = NULL;
 
 uint32_t sdl_get_version(void) {
-    SDL_version compiled;
-    SDL_VERSION(&compiled);
-    return compiled.major * 100 + compiled.minor * 10 + compiled.patch;
+    // from https://wiki.libsdl.org/SDL3/SDL_GetVersion
+    const int linked = SDL_GetVersion();  /* reported by linked SDL library */
+    return SDL_VERSIONNUM_MAJOR(linked) * 100 + SDL_VERSIONNUM_MINOR(linked) * 10 + SDL_VERSIONNUM_MICRO(linked);
 }
 
 lean_obj_res sdl_init(uint32_t flags, lean_obj_arg w) {
@@ -30,25 +30,24 @@ lean_obj_res sdl_quit(lean_obj_arg w) {
     return lean_io_result_mk_ok(lean_box(0));
 }
 
-lean_obj_res sdl_create_window(lean_obj_arg title, uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t flags, lean_obj_arg world) {
+lean_obj_res sdl_create_window(lean_obj_arg title, uint32_t w, uint32_t h, uint32_t flags, lean_obj_arg world) {
     const char* title_str = lean_string_cstr(title);
-    g_window = SDL_CreateWindow(title_str, (int)x, (int)y, (int)w, (int)h, flags);
+    g_window = SDL_CreateWindow(title_str, (int)w, (int)h, flags);
     if (g_window == NULL) {
         return lean_io_result_mk_ok(lean_box(0));
     }
     return lean_io_result_mk_ok(lean_box(1));
 }
 
-lean_obj_res sdl_create_renderer(uint32_t index_unsigned, uint32_t flags, lean_obj_arg w) {
+lean_obj_res sdl_create_renderer(lean_obj_arg w) {
     if (g_window == NULL) {
-        printf("C: No window available for renderer creation\n");
+        SDL_Log("C: No window available for renderer creation\n");
         return lean_io_result_mk_ok(lean_box(0));
     }
-    int32_t index = (int32_t)index_unsigned;
-    g_renderer = SDL_CreateRenderer(g_window, index, flags);
+    g_renderer = SDL_CreateRenderer(g_window, NULL);
     if (g_renderer == NULL) {
         const char* error = SDL_GetError();
-        printf("C: SDL_CreateRenderer failed: %s\n", error);
+        SDL_Log("C: SDL_CreateRenderer failed: %s\n", error);
         return lean_io_result_mk_ok(lean_box(0));
     }
     return lean_io_result_mk_ok(lean_box(1));
@@ -74,7 +73,7 @@ lean_obj_res sdl_render_present(lean_obj_arg w) {
 
 lean_obj_res sdl_render_fill_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, lean_obj_arg world) {
     if (g_renderer == NULL) return lean_io_result_mk_ok(lean_box_uint32(-1));
-    SDL_Rect rect = {(int)x, (int)y, (int)w, (int)h};
+    SDL_FRect rect = {(float)x, (float)y, (float)w, (float)h};
     int32_t result = SDL_RenderFillRect(g_renderer, &rect);
     return lean_io_result_mk_ok(lean_box_uint32(result));
 }

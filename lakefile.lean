@@ -10,21 +10,39 @@ input_file sdl.c where
 target sdl.o pkg : FilePath := do
   let srcJob ← sdl.c.fetch
   let oFile := pkg.buildDir / "c" / "sdl.o"
-  let leanInclude := "/home/ooo/.elan/toolchains/leanprover--lean4---v4.22.0/include"
-  buildO oFile srcJob #[] #["-fPIC", "-I/usr/include/SDL2", "-D_REENTRANT", s!"-I{leanInclude}"] "cc"
+  let leanInclude := (<- getLeanIncludeDir).toString
+  let sdlInclude := "vendor/SDL/include/"
+  let sdlImageInclude := "vendor/SDL_image/include/"
+  buildO oFile srcJob #[] #["-fPIC", s!"-I{sdlInclude}", s!"-I{sdlImageInclude}", "-D_REENTRANT", s!"-I{leanInclude}"] "cc"
 
 target libleansdl pkg : FilePath := do
   let sdlO ← sdl.o.fetch
   let name := nameToStaticLib "leansdl"
+  -- manually copy the DLLs we need to .lake/build/bin/ for the game to work
+  IO.FS.createDirAll ".lake/build/bin/"
+  if Platform.isWindows then
+    copyFile "vendor/SDL/build/SDL3.dll" ".lake/build/bin/SDL3.DLL"
+    copyFile "vendor/SDL_image/build/SDL3_image.dll" ".lake/build/bin/SDL3_image.DLL"
+    let lakeBinariesDir := (← IO.appPath).parent.get!
+    println! "Copying Lake DLLs from {lakeBinariesDir}"
+
+    for entry in (← lakeBinariesDir.readDir) do
+      if entry.path.extension == some "dll" then
+       copyFile entry.path (".lake/build/bin/" / entry.path.fileName.get!)
+
   buildStaticLib (pkg.staticLibDir / name) #[sdlO]
 
 lean_lib SDL where
   moreLinkObjs := #[libleansdl]
-  moreLinkArgs := #["-lSDL2", "-lSDL2_image"]
+  moreLinkArgs := #["-lSDL3", "-lSDL3_image"]
 
 lean_lib Engine
 
 @[default_target]
 lean_exe LeanDoomed where
   root := `Main
-  moreLinkArgs := #["/usr/lib/x86_64-linux-gnu/libSDL2.so", "/usr/lib/x86_64-linux-gnu/libSDL2_image.so"]
+  -- we have to add the rpath to tell the compiler where all of the libraries are
+  moreLinkArgs := if Platform.isWindows then
+    #["vendor/SDL/build/SDL3.dll", "vendor/SDL_image/build/SDL3_image.dll"]
+  else
+    #["vendor/SDL/build/libSDL3.so", "vendor/SDL_image/build/libSDL3_image.so", "-Wl,--allow-shlib-undefined", "-Wl,-rpath=vendor/SDL/build/", "-Wl,-rpath=vendor/SDL_image/build/"]

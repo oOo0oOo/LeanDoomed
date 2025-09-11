@@ -166,19 +166,21 @@ partial def gameLoop (engineState : IO.Ref EngineState) : IO Unit := do
     gameLoop engineState
 
 partial def run : IO Unit := do
-  unless (← SDL.init SDL.SDL_INIT_VIDEO) == 0 do
+  unless (← SDL.init SDL.SDL_INIT_VIDEO) == 1 do
     IO.println "Failed to initialize SDL"
     return
 
-  unless (← SDL.createWindow "LeanDoomed" 100 100 SCREEN_WIDTH SCREEN_HEIGHT SDL.SDL_WINDOW_SHOWN) != 0 do
+  unless (← SDL.createWindow "LeanDoomed" SCREEN_WIDTH SCREEN_HEIGHT SDL.SDL_WINDOW_SHOWN) != 0 do
     IO.println "Failed to create window"
     SDL.quit
     return
 
-  unless (← SDL.createRenderer 4294967295 SDL.SDL_RENDERER_ACCELERATED) != 0 do
+
+  unless (← SDL.createRenderer ()) != 0 do
     IO.println "Failed to create renderer"
     SDL.quit
     return
+
 
   let initialState : EngineState := {
     deltaTime := 0.0, lastTime := 0, running := true,
