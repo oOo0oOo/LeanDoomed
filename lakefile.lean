@@ -20,14 +20,30 @@ target libleansdl pkg : FilePath := do
   let name := nameToStaticLib "leansdl"
   -- manually copy the DLLs we need to .lake/build/bin/ for the game to work
   IO.FS.createDirAll ".lake/build/bin/"
+  let dstDir := ".lake/build/bin/"
+  let sdlBinariesDir : FilePath := "vendor/SDL/build/"
+  for entry in (← sdlBinariesDir.readDir) do
+    if entry.path.extension != none then
+      copyFile entry.path (dstDir / entry.path.fileName.get!)
+  let sdlImageBinariesDir : FilePath := "vendor/SDL_image/build/"
+  for entry in (← sdlImageBinariesDir.readDir) do
+    if entry.path.extension != none then
+      copyFile entry.path (dstDir / entry.path.fileName.get!)
   if Platform.isWindows then
-    copyFile "vendor/SDL/build/SDL3.dll" ".lake/build/bin/SDL3.DLL"
-    copyFile "vendor/SDL_image/build/SDL3_image.dll" ".lake/build/bin/SDL3_image.DLL"
+    -- binaries for Lean/Lake itself for the executable to run standalone
     let lakeBinariesDir := (← IO.appPath).parent.get!
     println! "Copying Lake DLLs from {lakeBinariesDir}"
 
     for entry in (← lakeBinariesDir.readDir) do
       if entry.path.extension == some "dll" then
+       copyFile entry.path (".lake/build/bin/" / entry.path.fileName.get!)
+  else
+  -- binaries for Lean/Lake itself, like libgmp are on a different place on Linux
+    let lakeBinariesDir := (← IO.appPath).parent.get!.parent.get! / "lib"
+    println! "Copying Lake binaries from {lakeBinariesDir}"
+
+    for entry in (← lakeBinariesDir.readDir) do
+      if entry.path.extension != none then
        copyFile entry.path (".lake/build/bin/" / entry.path.fileName.get!)
 
   buildStaticLib (pkg.staticLibDir / name) #[sdlO]
@@ -45,4 +61,4 @@ lean_exe LeanDoomed where
   moreLinkArgs := if Platform.isWindows then
     #["vendor/SDL/build/SDL3.dll", "vendor/SDL_image/build/SDL3_image.dll"]
   else
-    #["vendor/SDL/build/libSDL3.so", "vendor/SDL_image/build/libSDL3_image.so", "-Wl,--allow-shlib-undefined", "-Wl,-rpath=vendor/SDL/build/", "-Wl,-rpath=vendor/SDL_image/build/"]
+    #["vendor/SDL/build/libSDL3.so", "vendor/SDL_image/build/libSDL3_image.so", "-Wl,--allow-shlib-undefined", "-Wl,-rpath=$ORIGIN", "-Wl,-rpath=$ORIGIN"]
