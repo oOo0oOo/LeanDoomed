@@ -94,7 +94,7 @@ lean_obj_res sdl_get_ticks(lean_obj_arg w) {
 }
 
 lean_obj_res sdl_get_key_state(uint32_t scancode, lean_obj_arg w) {
-    const uint8_t* state = SDL_GetKeyboardState(NULL);
+    const uint8_t* state = (const uint8_t*)SDL_GetKeyboardState(NULL);
     uint8_t pressed = state[scancode];
     return lean_io_result_mk_ok(lean_box(pressed));
 }
