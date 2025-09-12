@@ -99,6 +99,13 @@ def castRay (map : Map) (startX startY angle : Float): Float × Float := Id.run 
   let texX := (wallX - wallX.floor) * TEXTURE_SIZE
   (distance, texX)
 
+def checkCollision (map : Map) (x y : Float) (radius : Float := 0.3) : Bool :=
+  let corners := #[
+    (x - radius, y - radius), (x + radius, y - radius),
+    (x - radius, y + radius), (x + radius, y + radius)
+  ]
+  corners.any (fun (cx, cy) => isWall map cx cy)
+
 def updateCamera (camera : Camera) (deltaTime : Float) : IO Camera := do
   let moveSpeed := camera.speed * deltaTime
   let mut newX := camera.x
@@ -106,11 +113,17 @@ def updateCamera (camera : Camera) (deltaTime : Float) : IO Camera := do
   let mut newAngle := camera.angle
 
   if ← isKeyDown .W then
-    newX := newX + Float.cos camera.angle * moveSpeed
-    newY := newY + Float.sin camera.angle * moveSpeed
+    let testX := camera.x + Float.cos camera.angle * moveSpeed
+    let testY := camera.y + Float.sin camera.angle * moveSpeed
+    if !checkCollision sampleMap testX camera.y then newX := testX
+    if !checkCollision sampleMap camera.x testY then newY := testY
+
   if ← isKeyDown .S then
-    newX := newX - Float.cos camera.angle * moveSpeed
-    newY := newY - Float.sin camera.angle * moveSpeed
+    let testX := camera.x - Float.cos camera.angle * moveSpeed
+    let testY := camera.y - Float.sin camera.angle * moveSpeed
+    if !checkCollision sampleMap testX camera.y then newX := testX
+    if !checkCollision sampleMap camera.x testY then newY := testY
+
   if ← isKeyDown .A then newAngle := newAngle - camera.turnSpeed * deltaTime
   if ← isKeyDown .D then newAngle := newAngle + camera.turnSpeed * deltaTime
 
