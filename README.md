@@ -14,13 +14,9 @@ Simple real-time Doom-style raycasting engine in Lean4:
 # Install elan if this is your first time using Lean
 curl https://elan.lean-lang.org/elan-init.sh -sSf | sh
 
-# Clone project and submodules (SDL3 etc)
-git clone --recurse-submodules https://github.com/oOo0oOo/LeanDoomed.git
+# Clone project
+git clone --recursive https://github.com/oOo0oOo/LeanDoomed.git
 cd LeanDoomed
-
-# Build dependencies
-chmod +x ./build_sdl_and_friends.sh
-sudo ./build_sdl_and_friends.sh
 
 # Run the "game"
 lake exe LeanDoomed

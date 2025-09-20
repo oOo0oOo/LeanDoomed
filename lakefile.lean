@@ -49,13 +49,20 @@ target libleansdl pkg : FilePath := do
 
 -- Build the repos with cmake
 -- SDL itself needs to be built before SDL_image, as the latter depends on the former
+-- We also need to make sure we are using a system provided C compiler, as the one that comes with Lean is missing important headers
   IO.println "Building SDL"
-  let configureSdlBuild ← IO.Process.output { cmd := "cmake", args := #["-S", sdlRepoDir, "-B", sdlRepoDir ++ "/build", "-DBUILD_SHARED_LIBS=ON", "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_C_COMPILER=cc"] }
-  if configureSdlBuild.exitCode != 0 then
-    IO.println s!"Error configuring SDL: {configureSdlBuild.stderr}"
+-- Create build directory if it doesn't exist
+  let sdlBuildDirExists ← System.FilePath.pathExists (sdlRepoDir ++ "/build")
+  if !sdlBuildDirExists then
+    let configureSdlBuild ← IO.Process.output { cmd := "cmake", args := #["-S", sdlRepoDir, "-B", sdlRepoDir ++ "/build", "-DBUILD_SHARED_LIBS=ON", "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_C_COMPILER=cc"] }
+    if configureSdlBuild.exitCode != 0 then
+      IO.println s!"Error configuring SDL: {configureSdlBuild.stderr}"
+    else
+      IO.println "SDL configured successfully"
+      IO.println configureSdlBuild.stdout
   else
-    IO.println "SDL configured successfully"
-    IO.println configureSdlBuild.stdout
+    IO.println "SDL build directory already exists, skipping configuration step"
+-- now actually build SDL once we've configured it
   let buildSdl ← IO.Process.output { cmd := "cmake", args :=  #["--build", sdlRepoDir ++ "/build", "--config", "Release",] }
   if buildSdl.exitCode != 0 then
     IO.println s!"Error building SDL: {buildSdl.exitCode}"
@@ -65,14 +72,20 @@ target libleansdl pkg : FilePath := do
     IO.println buildSdl.stdout
 -- Build SDL_Image
   IO.println "Building SDL_image"
-  let currentDir ← IO.currentDir
-  let sdlConfigPath := currentDir / sdlRepoDir / "build"
-  let configureSdlImageBuild ← IO.Process.output { cmd := "cmake", args :=  #["-S", sdlImageRepoDir, "-B", sdlImageRepoDir ++ "/build", s!"-DSDL3_DIR={sdlConfigPath}", "-DBUILD_SHARED_LIBS=ON", "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_C_COMPILER=cc"] }
-  if configureSdlImageBuild.exitCode != 0 then
-    IO.println s!"Error configuring SDL_image: {configureSdlImageBuild.stderr}"
+-- Create SDL_Image build directory if it doesn't exist
+  let sdlImageBuildDirExists ← System.FilePath.pathExists (sdlImageRepoDir ++ "/build")
+  if !sdlImageBuildDirExists then
+    let currentDir ← IO.currentDir
+    let sdlConfigPath := currentDir / sdlRepoDir / "build"
+    let configureSdlImageBuild ← IO.Process.output { cmd := "cmake", args :=  #["-S", sdlImageRepoDir, "-B", sdlImageRepoDir ++ "/build", s!"-DSDL3_DIR={sdlConfigPath}", "-DBUILD_SHARED_LIBS=ON", "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_C_COMPILER=cc"] }
+    if configureSdlImageBuild.exitCode != 0 then
+      IO.println s!"Error configuring SDL_image: {configureSdlImageBuild.stderr}"
+    else
+      IO.println "SDL_image configured successfully"
+      IO.println configureSdlImageBuild.stdout
   else
-    IO.println "SDL_image configured successfully"
-    IO.println configureSdlImageBuild.stdout
+    IO.println "SDL_image build directory already exists, skipping configuration step"
+-- now actually build SDL_image once we've configured it
   let buildSdlImage ← IO.Process.output { cmd := "cmake", args := #["--build", sdlImageRepoDir ++ "/build", "--config", "Release"] }
   if buildSdlImage.exitCode != 0 then
     IO.println s!"Error building SDL_image: {buildSdlImage.stderr}"
