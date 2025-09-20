@@ -5,10 +5,10 @@ package LeanDoomed
 
 -- we can clone directly from main, I'm sure this is fine :)
 def sdlGitRepo : String := "https://github.com/libsdl-org/SDL.git"
-def sdlRepoDir : FilePath := "vendor/SDL"
+def sdlRepoDir : String := "vendor/SDL"
 
 def sdlImageGitRepo : String := "https://github.com/libsdl-org/SDL_image.git"
-def sdlImageRepoDir : FilePath := "vendor/SDL_image"
+def sdlImageRepoDir : String := "vendor/SDL_image"
 
 input_file sdl.c where
   path := "c" / "sdl.c"
@@ -23,8 +23,8 @@ target sdl.o pkg : FilePath := do
   buildO oFile srcJob #[] #["-fPIC", s!"-I{sdlInclude}", s!"-I{sdlImageInclude}", "-D_REENTRANT", s!"-I{leanInclude}"] "cc"
 
 target libleansdl pkg : FilePath := do
-  let _ ← IO.Process.run { cmd := "git", args := #["clone", "--depth", "1", "--recursive", sdlGitRepo, "vendor/SDL"] }
-  let _ ← IO.Process.run { cmd := "git", args := #["clone", "--depth", "1", "--recursive", sdlImageGitRepo, "vendor/SDL_image"] }
+  let _ ← IO.Process.run { cmd := "git", args := #["clone", "--depth", "1", "--recursive", sdlGitRepo, sdlRepoDir] }
+  let _ ← IO.Process.run { cmd := "git", args := #["clone", "--depth", "1", "--recursive", sdlImageGitRepo, sdlImageRepoDir] }
   let sdlO ← sdl.o.fetch
   let name := nameToStaticLib "leansdl"
   -- manually copy the DLLs we need to .lake/build/bin/ for the game to work
