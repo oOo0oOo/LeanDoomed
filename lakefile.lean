@@ -25,8 +25,59 @@ target sdl.o pkg : FilePath := do
   buildO oFile srcJob #[] #["-fPIC", s!"-I{sdlInclude}", s!"-I{sdlImageInclude}", "-D_REENTRANT", s!"-I{leanInclude}"] "cc"
 
 target libleansdl pkg : FilePath := do
-  let _ ← IO.Process.run { cmd := "git", args := #["clone", "-b", sdlBranch, "--single-branch", "--depth", "1", "--recursive", sdlGitRepo, sdlRepoDir] }
-  let _ ← IO.Process.run { cmd := "git", args := #["clone", "-b", sdlBranch, "--single-branch", "--depth", "1", "--recursive", sdlImageGitRepo, sdlImageRepoDir] }
+-- Helper function to run command and handle errors
+-- Clone the repos if they don't exist
+  let sdlExists ← System.FilePath.pathExists sdlRepoDir
+  if !sdlExists then
+    IO.println "Cloning SDL"
+    let sdlClone ← IO.Process.output { cmd := "git", args := #["clone", "-b", sdlBranch, "--single-branch", "--depth", "1", "--recursive", sdlGitRepo, sdlRepoDir] }
+    if sdlClone.exitCode != 0 then
+      IO.println s!"Error cloning SDL: {sdlClone.stderr}"
+    else
+      IO.println "SDL cloned successfully"
+      IO.println sdlClone.stdout
+
+  let sdlImageExists ← System.FilePath.pathExists sdlImageRepoDir
+  if !sdlImageExists then
+    IO.println "Cloning SDL_image"
+    let sdlImageClone ← IO.Process.output { cmd := "git", args := #["clone", "-b", sdlBranch, "--single-branch", "--depth", "1", "--recursive", sdlImageGitRepo, sdlImageRepoDir] }
+    if sdlImageClone.exitCode != 0 then
+      IO.println s!"Error cloning SDL_image: {sdlImageClone.stderr}"
+    else
+      IO.println "SDL_image cloned successfully"
+      IO.println sdlImageClone.stdout
+
+-- Build the repos with cmake
+-- SDL itself needs to be built before SDL_image, as the latter depends on the former
+  IO.println "Building SDL"
+  let configureSdlBuild ← IO.Process.output { cmd := "cmake", args := #["-S", sdlRepoDir, "-B", sdlRepoDir ++ "/build", "-DBUILD_SHARED_LIBS=ON", "-DCMAKE_BUILD_TYPE=Release"] }
+  if configureSdlBuild.exitCode != 0 then
+    IO.println s!"Error configuring SDL: {configureSdlBuild.stderr}"
+  else
+    IO.println "SDL configured successfully"
+    IO.println configureSdlBuild.stdout
+  let buildSdl ← IO.Process.output { cmd := "cmake", args :=  #["--build", sdlRepoDir ++ "/build", "--config", "Release"] }
+  if buildSdl.exitCode != 0 then
+    IO.println s!"Error building SDL: {buildSdl.exitCode}"
+    IO.println buildSdl.stderr
+  else
+    IO.println "SDL built successfully"
+    IO.println buildSdl.stdout
+-- Build SDL_Image
+  IO.println "Building SDL_image"
+  let configureSdlImageBuild ← IO.Process.output { cmd := "cmake", args :=  #["-S", sdlImageRepoDir, "-B", sdlImageRepoDir ++ "/build", s!"-DSDL3_DIR={sdlRepoDir}/build", "-DBUILD_SHARED_LIBS=ON", "-DCMAKE_BUILD_TYPE=Release"] }
+  if configureSdlImageBuild.exitCode != 0 then
+    IO.println s!"Error configuring SDL_image: {configureSdlImageBuild.stderr}"
+  else
+    IO.println "SDL_image configured successfully"
+    IO.println configureSdlImageBuild.stdout
+  let buildSdlImage ← IO.Process.output { cmd := "cmake", args := #["--build", sdlImageRepoDir ++ "/build", "--config", "Release"] }
+  if buildSdlImage.exitCode != 0 then
+    IO.println s!"Error building SDL_image: {buildSdlImage.stderr}"
+  else
+    IO.println "SDL_image built successfully"
+    IO.println buildSdlImage.stdout
+
   let sdlO ← sdl.o.fetch
   let name := nameToStaticLib "leansdl"
   -- manually copy the DLLs we need to .lake/build/bin/ for the game to work
