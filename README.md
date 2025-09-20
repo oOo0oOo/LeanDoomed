@@ -18,7 +18,7 @@ curl https://elan.lean-lang.org/elan-init.sh -sSf | sh
 git clone --recursive https://github.com/oOo0oOo/LeanDoomed.git
 cd LeanDoomed
 
-# Run the "game"
+# Run the "game". The initial run will take a few minutes to compile everything.
 lake exe LeanDoomed
 ```
 
