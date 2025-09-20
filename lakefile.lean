@@ -50,13 +50,13 @@ target libleansdl pkg : FilePath := do
 -- Build the repos with cmake
 -- SDL itself needs to be built before SDL_image, as the latter depends on the former
   IO.println "Building SDL"
-  let configureSdlBuild ← IO.Process.output { cmd := "cmake", args := #["-S", sdlRepoDir, "-B", sdlRepoDir ++ "/build", "-DBUILD_SHARED_LIBS=ON", "-DCMAKE_BUILD_TYPE=Release"] }
+  let configureSdlBuild ← IO.Process.output { cmd := "cmake", args := #["-S", sdlRepoDir, "-B", sdlRepoDir ++ "/build", "-DBUILD_SHARED_LIBS=ON", "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_C_COMPILER=cc"] }
   if configureSdlBuild.exitCode != 0 then
     IO.println s!"Error configuring SDL: {configureSdlBuild.stderr}"
   else
     IO.println "SDL configured successfully"
     IO.println configureSdlBuild.stdout
-  let buildSdl ← IO.Process.output { cmd := "cmake", args :=  #["--build", sdlRepoDir ++ "/build", "--config", "Release"] }
+  let buildSdl ← IO.Process.output { cmd := "cmake", args :=  #["--build", sdlRepoDir ++ "/build", "--config", "Release",] }
   if buildSdl.exitCode != 0 then
     IO.println s!"Error building SDL: {buildSdl.exitCode}"
     IO.println buildSdl.stderr
@@ -65,7 +65,9 @@ target libleansdl pkg : FilePath := do
     IO.println buildSdl.stdout
 -- Build SDL_Image
   IO.println "Building SDL_image"
-  let configureSdlImageBuild ← IO.Process.output { cmd := "cmake", args :=  #["-S", sdlImageRepoDir, "-B", sdlImageRepoDir ++ "/build", s!"-DSDL3_DIR={sdlRepoDir}/build", "-DBUILD_SHARED_LIBS=ON", "-DCMAKE_BUILD_TYPE=Release"] }
+  let currentDir ← IO.currentDir
+  let sdlConfigPath := currentDir / sdlRepoDir / "build"
+  let configureSdlImageBuild ← IO.Process.output { cmd := "cmake", args :=  #["-S", sdlImageRepoDir, "-B", sdlImageRepoDir ++ "/build", s!"-DSDL3_DIR={sdlConfigPath}", "-DBUILD_SHARED_LIBS=ON", "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_C_COMPILER=cc"] }
   if configureSdlImageBuild.exitCode != 0 then
     IO.println s!"Error configuring SDL_image: {configureSdlImageBuild.stderr}"
   else
