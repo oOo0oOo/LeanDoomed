@@ -17,6 +17,10 @@ structure Camera where
 
 abbrev Map := Array (Array UInt8)
 
+structure RenderContext where
+  renderer : SDL.Renderer
+  texture : Option SDL.Texture
+
 structure EngineState where
   deltaTime : Float
   lastTime : UInt32
@@ -46,11 +50,11 @@ inductive Key where
   | W | A | S | D | Left | Right | Space | Escape
 
 def keyToScancode : Key → UInt32
-  | .W => SDL.SDL_SCANCODE_W | .A => SDL.SDL_SCANCODE_A | .S => SDL.SDL_SCANCODE_S
-  | .D => SDL.SDL_SCANCODE_D | .Left => SDL.SDL_SCANCODE_LEFT | .Right => SDL.SDL_SCANCODE_RIGHT
-  | .Space => SDL.SDL_SCANCODE_SPACE | .Escape => SDL.SDL_SCANCODE_ESCAPE
+  | .W => SDL.SCANCODE_W | .A => SDL.SCANCODE_A | .S => SDL.SCANCODE_S
+  | .D => SDL.SCANCODE_D | .Left => SDL.SCANCODE_LEFT | .Right => SDL.SCANCODE_RIGHT
+  | .Space => SDL.SCANCODE_SPACE | .Escape => SDL.SCANCODE_ESCAPE
 
-def isKeyDown (key : Key) : IO Bool := SDL.getKeyState (keyToScancode key)
+def isKeyDown (key : Key) : IO Bool := SDL.isKeyPressed (keyToScancode key)
 
 def isWall (mapp : Map) (x y : Float) : Bool :=
   if x < 0.0 || y < 0.0 then true else
@@ -129,15 +133,15 @@ def updateCamera (camera : Camera) (deltaTime : Float) : IO Camera := do
 
   pure { camera with x := newX, y := newY, angle := newAngle }
 
-def setColor (color : Color) : IO Unit :=
-  SDL.setRenderDrawColor color.r color.g color.b color.a *> pure ()
+def setColor (ctx : RenderContext) (color : Color) : IO Unit :=
+  SDL.setDrawColor ctx.renderer color.r color.g color.b color.a
 
-def fillRect (x y w h : Int32) : IO Unit :=
-  SDL.renderFillRect x y w h *> pure ()
+def fillRect (ctx : RenderContext) (x y w h : Int32) : IO Unit :=
+  SDL.fillRect ctx.renderer x y w h
 
-def renderScene (state : EngineState) : IO Unit := do
-  setColor { r := 135, g := 206, b := 235 }
-  let _ ← SDL.renderClear
+def renderScene (ctx : RenderContext) (state : EngineState) : IO Unit := do
+  setColor ctx { r := 135, g := 206, b := 235 }
+  SDL.clear ctx.renderer
 
   let rayStep := FOV / SCREEN_WIDTH.toFloat
   for column in [0:SCREEN_WIDTH.toNatClampNeg] do
@@ -162,11 +166,13 @@ def renderScene (state : EngineState) : IO Unit := do
           let start := 0.5 + (TEXTURE_SIZE - visible) / 2
           (start.toInt32, (start + visible).toInt32)
 
-      let _ ← SDL.renderTextureColumn column.toInt32 wallStartInt wallHeightInt texX.toInt32 texYStart texYEnd
+      match ctx.texture with
+      | some tex => SDL.renderTextureColumn ctx.renderer tex column.toInt32 wallStartInt wallHeightInt texX.toInt32 texYStart texYEnd
+      | none => pure ()
 
     let shade := max 20 (50 - distance * 5).toUInt8
-    setColor { r := shade, g := shade + 30, b := shade }
-    fillRect column.toInt32 wallEndInt 1 (SCREEN_HEIGHT - wallEndInt)
+    setColor ctx { r := shade, g := shade + 30, b := shade }
+    fillRect ctx column.toInt32 wallEndInt 1 (SCREEN_HEIGHT - wallEndInt)
 
 private def updateEngineState (engineState : IO.Ref EngineState) : IO Unit := do
   let state ← engineState.get
@@ -175,36 +181,35 @@ private def updateEngineState (engineState : IO.Ref EngineState) : IO Unit := do
   let newCamera ← updateCamera state.camera deltaTime
   engineState.set { state with deltaTime, lastTime := currentTime, camera := newCamera }
 
-partial def gameLoop (engineState : IO.Ref EngineState) : IO Unit := do
+partial def gameLoop (ctx : RenderContext) (engineState : IO.Ref EngineState) : IO Unit := do
   updateEngineState engineState
 
   let eventType ← SDL.pollEvent
-  if eventType == SDL.SDL_QUIT || (← isKeyDown .Escape) then
+  if eventType == SDL.EVENT_QUIT || (← isKeyDown .Escape) then
     engineState.modify (fun s => { s with running := false })
 
   let state ← engineState.get
   if state.running then
-    renderScene state
-    SDL.renderPresent
-    gameLoop engineState
+    renderScene ctx state
+    SDL.present ctx.renderer
+    gameLoop ctx engineState
 
 partial def run : IO Unit := do
-  unless (← SDL.init SDL.SDL_INIT_VIDEO) == 1 do
+  unless (← SDL.init SDL.INIT_VIDEO) do
     IO.println "Failed to initialize SDL"
     return
 
-  unless (← SDL.createWindow "LeanDoomed" SCREEN_WIDTH SCREEN_HEIGHT SDL.SDL_WINDOW_SHOWN) != 0 do
-    IO.println "Failed to create window"
-    SDL.quit
-    return
+  let some window ← SDL.createWindow "LeanDoomed" SCREEN_WIDTH SCREEN_HEIGHT
+    | do IO.println "Failed to create window"; SDL.quit; return
 
-  unless (← SDL.createRenderer ()) != 0 do
-    IO.println "Failed to create renderer"
-    SDL.quit
-    return
+  let some renderer ← SDL.createRenderer window
+    | do IO.println "Failed to create renderer"; SDL.destroyWindow window; SDL.quit; return
 
-  unless (← SDL.loadTexture "wall.png") != 0 do
+  let texture ← SDL.loadTexture renderer "wall.png"
+  if texture.isNone then
     IO.println "Failed to load texture, using solid colors"
+
+  let ctx : RenderContext := { renderer, texture }
 
   let initialState : EngineState := {
     deltaTime := 0.0, lastTime := 0, running := true,
@@ -214,7 +219,13 @@ partial def run : IO Unit := do
 
   let engineState ← IO.mkRef initialState
   IO.println "Use WASD to move, A/D to turn, ESC to quit"
-  gameLoop engineState
+  gameLoop ctx engineState
+
+  -- Cleanup
+  if let some tex := texture then
+    SDL.destroyTexture tex
+  SDL.destroyRenderer renderer
+  SDL.destroyWindow window
   SDL.quit
 
 def EngineState.setRunning (state : EngineState) (running : Bool) : EngineState :=

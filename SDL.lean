@@ -1,59 +1,88 @@
 namespace SDL
 
-def SDL_INIT_VIDEO : UInt32 := 0x00000020
-def SDL_WINDOW_SHOWN : UInt32 := 0x00000004
-def SDL_RENDERER_ACCELERATED : UInt32 := 0x00000002
-def SDL_QUIT : UInt32 := 0x100
+-- Opaque types for SDL resources (type-safe handles)
+private opaque WindowPointed : NonemptyType
+def Window : Type := WindowPointed.type
+instance : Nonempty Window := WindowPointed.property
 
-def SDL_SCANCODE_W : UInt32 := 26
-def SDL_SCANCODE_A : UInt32 := 4
-def SDL_SCANCODE_S : UInt32 := 22
-def SDL_SCANCODE_D : UInt32 := 7
-def SDL_SCANCODE_LEFT : UInt32 := 80
-def SDL_SCANCODE_RIGHT : UInt32 := 79
-def SDL_SCANCODE_SPACE : UInt32 := 44
-def SDL_SCANCODE_ESCAPE : UInt32 := 41
+private opaque RendererPointed : NonemptyType
+def Renderer : Type := RendererPointed.type
+instance : Nonempty Renderer := RendererPointed.property
 
+private opaque TexturePointed : NonemptyType
+def Texture : Type := TexturePointed.type
+instance : Nonempty Texture := TexturePointed.property
+
+-- SDL Constants
+def INIT_VIDEO : UInt32 := 0x00000020
+def EVENT_QUIT : UInt32 := 0x100
+
+-- Scancodes
+def SCANCODE_W : UInt32 := 26
+def SCANCODE_A : UInt32 := 4
+def SCANCODE_S : UInt32 := 22
+def SCANCODE_D : UInt32 := 7
+def SCANCODE_LEFT : UInt32 := 80
+def SCANCODE_RIGHT : UInt32 := 79
+def SCANCODE_SPACE : UInt32 := 44
+def SCANCODE_ESCAPE : UInt32 := 41
+
+-- Initialization
 @[extern "sdl_init"]
-opaque init : UInt32 → IO UInt32
+opaque init (flags : UInt32) : IO Bool
 
 @[extern "sdl_quit"]
 opaque quit : IO Unit
 
+-- Window management
 @[extern "sdl_create_window"]
-opaque createWindow : String → Int32 → Int32 → UInt32 → IO UInt32
+opaque createWindow (title : @& String) (w h : Int32) : IO (Option Window)
 
+@[extern "sdl_destroy_window"]
+opaque destroyWindow (window : @& Window) : IO Unit
+
+-- Renderer management
 @[extern "sdl_create_renderer"]
-opaque createRenderer : Unit → IO UInt32
+opaque createRenderer (window : @& Window) : IO (Option Renderer)
 
-@[extern "sdl_set_render_draw_color"]
-opaque setRenderDrawColor : UInt8 → UInt8 → UInt8 → UInt8 → IO Int32
+@[extern "sdl_destroy_renderer"]
+opaque destroyRenderer (renderer : @& Renderer) : IO Unit
 
-@[extern "sdl_render_clear"]
-opaque renderClear : IO Int32
+-- Drawing operations
+@[extern "sdl_set_draw_color"]
+opaque setDrawColor (renderer : @& Renderer) (r g b a : UInt8) : IO Unit
 
-@[extern "sdl_render_present"]
-opaque renderPresent : IO Unit
+@[extern "sdl_clear"]
+opaque clear (renderer : @& Renderer) : IO Unit
 
-@[extern "sdl_render_fill_rect"]
-opaque renderFillRect : Int32 → Int32 → Int32 → Int32 → IO Int32
+@[extern "sdl_present"]
+opaque present (renderer : @& Renderer) : IO Unit
 
-@[extern "sdl_delay"]
-opaque delay : UInt32 → IO Unit
+@[extern "sdl_fill_rect"]
+opaque fillRect (renderer : @& Renderer) (x y w h : Int32) : IO Unit
 
+-- Texture operations
+@[extern "sdl_load_texture"]
+opaque loadTexture (renderer : @& Renderer) (path : @& String) : IO (Option Texture)
+
+@[extern "sdl_destroy_texture"]
+opaque destroyTexture (texture : @& Texture) : IO Unit
+
+@[extern "sdl_render_texture_column"]
+opaque renderTextureColumn (renderer : @& Renderer) (texture : @& Texture)
+  (dstX dstY dstH srcX srcYStart srcYEnd : Int32) : IO Unit
+
+-- Input and timing
 @[extern "sdl_poll_event"]
 opaque pollEvent : IO UInt32
 
 @[extern "sdl_get_ticks"]
 opaque getTicks : IO UInt32
 
-@[extern "sdl_get_key_state"]
-opaque getKeyState : UInt32 → IO Bool
+@[extern "sdl_is_key_pressed"]
+opaque isKeyPressed (scancode : UInt32) : IO Bool
 
-@[extern "sdl_load_texture"]
-opaque loadTexture : String → IO UInt32
-
-@[extern "sdl_render_texture_column"]
-opaque renderTextureColumn : Int32 → Int32 → Int32 → Int32 → Int32 → Int32 → IO Int32
+@[extern "sdl_delay"]
+opaque delay (ms : UInt32) : IO Unit
 
 end SDL
