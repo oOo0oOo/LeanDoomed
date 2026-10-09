@@ -110,7 +110,7 @@ def checkCollision (map : Map) (x y : Float) (radius : Float := 0.3) : Bool :=
   ]
   corners.any (fun (cx, cy) => isWall map cx cy)
 
-def updateCamera (camera : Camera) (deltaTime : Float) : IO Camera := do
+def updateCamera (camera : Camera) (deltaTime : Float) (map : Map := sampleMap) : IO Camera := do
   let moveSpeed := camera.speed * deltaTime
   let mut newX := camera.x
   let mut newY := camera.y
@@ -119,14 +119,14 @@ def updateCamera (camera : Camera) (deltaTime : Float) : IO Camera := do
   if ← isKeyDown .W then
     let testX := camera.x + Float.cos camera.angle * moveSpeed
     let testY := camera.y + Float.sin camera.angle * moveSpeed
-    if !checkCollision sampleMap testX camera.y then newX := testX
-    if !checkCollision sampleMap camera.x testY then newY := testY
+    if !checkCollision map testX camera.y then newX := testX
+    if !checkCollision map camera.x testY then newY := testY
 
   if ← isKeyDown .S then
     let testX := camera.x - Float.cos camera.angle * moveSpeed
     let testY := camera.y - Float.sin camera.angle * moveSpeed
-    if !checkCollision sampleMap testX camera.y then newX := testX
-    if !checkCollision sampleMap camera.x testY then newY := testY
+    if !checkCollision map testX camera.y then newX := testX
+    if !checkCollision map camera.x testY then newY := testY
 
   if ← isKeyDown .A then newAngle := newAngle - camera.turnSpeed * deltaTime
   if ← isKeyDown .D then newAngle := newAngle + camera.turnSpeed * deltaTime
@@ -139,7 +139,7 @@ def setColor (ctx : RenderContext) (color : Color) : IO Unit :=
 def fillRect (ctx : RenderContext) (x y w h : Int32) : IO Unit :=
   SDL.fillRect ctx.renderer x y w h
 
-def renderScene (ctx : RenderContext) (state : EngineState) : IO Unit := do
+def renderSceneLegacy (ctx : RenderContext) (state : EngineState) : IO Unit := do
   setColor ctx { r := 135, g := 206, b := 235 }
   SDL.clear ctx.renderer
 
@@ -168,65 +168,99 @@ def renderScene (ctx : RenderContext) (state : EngineState) : IO Unit := do
 
       match ctx.texture with
       | some tex => SDL.renderTextureColumn ctx.renderer tex column.toInt32 wallStartInt wallHeightInt texX.toInt32 texYStart texYEnd
-      | none => pure ()
+      | none =>
+        setColor ctx { r := 180, g := 80, b := 50 }
+        fillRect ctx column.toInt32 wallStartInt 1 wallHeightInt
 
     let shade := max 20 (50 - distance * 5).toUInt8
     setColor ctx { r := shade, g := shade + 30, b := shade }
     fillRect ctx column.toInt32 wallEndInt 1 (SCREEN_HEIGHT - wallEndInt)
 
+def sceneColumns (state : EngineState) : Array SDL.DrawColumn := Id.run do
+  let mut columns := #[]
+  let rayStep := FOV / SCREEN_WIDTH.toFloat
+  for column in [0:SCREEN_WIDTH.toNatClampNeg] do
+    let rayAngle := state.camera.angle - FOV/2 + column.toFloat * rayStep
+    let (distance, texX) := castRay state.gameMap state.camera.x state.camera.y rayAngle
+    let wallHeight := (SCREEN_HEIGHT.toFloat / max 0.1 distance) * 1.5
+
+    let wallStart := (SCREEN_HEIGHT.toFloat - wallHeight) / 2
+    let visibleStart := max 0 wallStart
+    let visibleEnd := min SCREEN_HEIGHT.toFloat (wallStart + wallHeight)
+
+    let wallStartInt := visibleStart.toInt32
+    let wallEndInt := visibleEnd.toInt32
+    let wallHeightInt := wallEndInt - wallStartInt
+
+    let (texYStart, texYEnd) :=
+      if wallHeight <= SCREEN_HEIGHT.toFloat then (0, TEXTURE_SIZE.toInt32)
+      else
+        let zoom := wallHeight / SCREEN_HEIGHT.toFloat
+        let visible := TEXTURE_SIZE / zoom
+        let start := 0.5 + (TEXTURE_SIZE - visible) / 2
+        (start.toInt32, (start + visible).toInt32)
+    let shade := max 20 (50 - distance * 5).toUInt8
+    columns := columns.push {
+      x := column.toInt32, y := wallStartInt, height := wallHeightInt,
+      texX := texX.toInt32, texYStart, texYEnd, shade }
+  return columns
+
+def renderScene (ctx : RenderContext) (state : EngineState) : IO Unit := do
+  setColor ctx { r := 135, g := 206, b := 235 }
+  SDL.clear ctx.renderer
+  SDL.renderColumns ctx.renderer ctx.texture (sceneColumns state) SCREEN_HEIGHT
+
 private def updateEngineState (engineState : IO.Ref EngineState) : IO Unit := do
   let state ← engineState.get
   let currentTime ← SDL.getTicks
-  let deltaTime := (currentTime - state.lastTime).toFloat / 1000.0
-  let newCamera ← updateCamera state.camera deltaTime
+  let deltaTime := min 0.1 ((currentTime - state.lastTime).toFloat / 1000.0)
+  let newCamera ← updateCamera state.camera deltaTime state.gameMap
   engineState.set { state with deltaTime, lastTime := currentTime, camera := newCamera }
 
-partial def gameLoop (ctx : RenderContext) (engineState : IO.Ref EngineState) : IO Unit := do
-  updateEngineState engineState
-
-  let eventType ← SDL.pollEvent
-  if eventType == SDL.EVENT_QUIT || (← isKeyDown .Escape) then
+partial def drainEvents (engineState : IO.Ref EngineState) : IO Unit := do
+  let event ← SDL.pollEvent
+  if event == 0 then return
+  if event == SDL.EVENT_QUIT then
     engineState.modify (fun s => { s with running := false })
+  drainEvents engineState
 
+partial def gameLoop (ctx : RenderContext) (engineState : IO.Ref EngineState)
+    (remaining : Option Nat := none) : IO Unit := do
+  drainEvents engineState
+  if ← isKeyDown .Escape then
+    engineState.modify (fun s => { s with running := false })
+  updateEngineState engineState
   let state ← engineState.get
-  if state.running then
+  if state.running && remaining != some 0 then
     renderScene ctx state
     SDL.present ctx.renderer
-    gameLoop ctx engineState
+    gameLoop ctx engineState (remaining.map (· - 1))
 
-partial def run : IO Unit := do
+partial def run (frames : Option Nat := none) : IO Unit := do
   unless (← SDL.init SDL.INIT_VIDEO) do
-    IO.println "Failed to initialize SDL"
-    return
-
-  let some window ← SDL.createWindow "LeanDoomed" SCREEN_WIDTH SCREEN_HEIGHT
-    | do IO.println "Failed to create window"; SDL.quit; return
-
-  let some renderer ← SDL.createRenderer window
-    | do IO.println "Failed to create renderer"; SDL.destroyWindow window; SDL.quit; return
-
-  let texture ← SDL.loadTexture renderer "wall.png"
-  if texture.isNone then
-    IO.println "Failed to load texture, using solid colors"
-
-  let ctx : RenderContext := { renderer, texture }
-
-  let initialState : EngineState := {
-    deltaTime := 0.0, lastTime := 0, running := true,
-    camera := { x := 1.5, y := 1.5, angle := 0.0 },
-    gameMap := sampleMap
-  }
-
-  let engineState ← IO.mkRef initialState
-  IO.println "Use WASD to move, A/D to turn, ESC to quit"
-  gameLoop ctx engineState
-
-  -- Cleanup
-  if let some tex := texture then
-    SDL.destroyTexture tex
-  SDL.destroyRenderer renderer
-  SDL.destroyWindow window
-  SDL.quit
+    throw <| IO.userError "Failed to initialize SDL"
+  try
+    let some window ← SDL.createWindow "LeanDoomed" SCREEN_WIDTH SCREEN_HEIGHT
+      | throw <| IO.userError "Failed to create window"
+    try
+      let some renderer ← SDL.createRenderer window
+        | throw <| IO.userError "Failed to create renderer"
+      try
+        let texture ← SDL.loadTexture renderer "wall.png"
+        try
+          if texture.isNone then IO.println "Failed to load texture, using solid colors"
+          let ctx : RenderContext := { renderer, texture }
+          let initialState : EngineState := {
+            deltaTime := 0.0, lastTime := (← SDL.getTicks), running := true,
+            camera := { x := 1.5, y := 1.5, angle := 0.0 }, gameMap := sampleMap }
+          let engineState ← IO.mkRef initialState
+          IO.println "Use W/S to move, A/D to turn, ESC to quit"
+          gameLoop ctx engineState frames
+        finally
+          if let some tex := texture then SDL.destroyTexture tex
+      finally SDL.destroyRenderer renderer
+    finally SDL.destroyWindow window
+  finally SDL.quit
 
 def EngineState.setRunning (state : EngineState) (running : Bool) : EngineState :=
   { state with running }

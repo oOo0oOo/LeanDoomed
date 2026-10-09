@@ -1,141 +1,92 @@
 import Lake
 open System Lake DSL
 
-package LeanDoomed
+package LeanDoomed where
+  testDriver := "doomed_tests"
 
-def sdlGitRepo : String := "https://github.com/libsdl-org/SDL.git"
-def sdlRepoDir : String := "vendor/SDL"
+def sdlVersion := "release-3.4.18"
+def sdlImageVersion := "release-3.4.8"
 
-def sdlImageGitRepo : String := "https://github.com/libsdl-org/SDL_image.git"
-def sdlImageRepoDir : String := "vendor/SDL_image"
+private def checked (cmd : String) (args : Array String) : IO Unit := do
+  let output ← IO.Process.output { cmd, args }
+  if output.exitCode != 0 then
+    throw <| IO.userError s!"{cmd} {args} failed ({output.exitCode}):\n{output.stdout}\n{output.stderr}"
 
--- clone from a stable branch to avoid breakages
-def sdlBranch : String := "release-3.2.x"
+private def ensureVendor (name version : String) : IO Unit := do
+  let dir := s!"vendor/{name}"
+  if !(← FilePath.pathExists dir) then
+    checked "git" #["clone", "--branch", version, "--single-branch", "--depth", "1", "--recursive",
+      s!"https://github.com/libsdl-org/{name}.git", dir]
+  let head ← IO.Process.output { cmd := "git", args := #["-C", dir, "rev-parse", "HEAD"] }
+  let pinned ← IO.Process.output { cmd := "git", args := #["-C", dir, "rev-parse", version ++ "^{commit}"] }
+  if head.exitCode != 0 || pinned.exitCode != 0 || head.stdout != pinned.stdout then
+    throw <| IO.userError s!"{dir} must be at {version}. Preserve any changes and move the old checkout aside before rebuilding."
+
+private def configure (source build : FilePath) (extra : Array String := #[]) : IO Unit := do
+  let root := ((← IO.currentDir) / source).normalize.toString
+  let marker := build / ".source-root"
+  let previous ← try IO.FS.readFile marker catch _ => pure ""
+  if previous != "" && previous != root then
+    -- CMake caches absolute source paths. Discard only generated configuration on relocation.
+    let cache := build / "CMakeCache.txt"
+    if ← cache.pathExists then IO.FS.removeFile cache
+    let files := build / "CMakeFiles"
+    if ← files.pathExists then IO.FS.removeDirAll files
+  checked "cmake" <| #["-S", source.toString, "-B", build.toString,
+    "-DBUILD_SHARED_LIBS=ON", "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_C_COMPILER=cc"] ++ extra
+  IO.FS.writeFile marker root
 
 input_file sdl.c where
   path := "c" / "sdl.c"
   text := true
 
-target sdl.o pkg : FilePath := do
-  let srcJob ← sdl.c.fetch
-  let oFile := pkg.buildDir / "c" / "sdl.o"
-  let leanInclude := (<- getLeanIncludeDir).toString
-  let sdlInclude := "vendor/SDL/include/"
-  let sdlImageInclude := "vendor/SDL_image/include/"
-  buildO oFile srcJob #[] #["-fPIC", s!"-I{sdlInclude}", s!"-I{sdlImageInclude}", "-D_REENTRANT", s!"-I{leanInclude}"] "cc"
+input_file sdl_abi.h where
+  path := "c" / "sdl_abi.h"
+  text := true
 
 target libleansdl pkg : FilePath := do
--- Helper function to run command and handle errors
--- Clone the repos if they don't exist
-  let sdlExists ← System.FilePath.pathExists sdlRepoDir
-  if !sdlExists then
-    IO.println "Cloning SDL"
-    let sdlClone ← IO.Process.output { cmd := "git", args := #["clone", "-b", sdlBranch, "--single-branch", "--depth", "1", "--recursive", sdlGitRepo, sdlRepoDir] }
-    if sdlClone.exitCode != 0 then
-      IO.println s!"Error cloning SDL: {sdlClone.stderr}"
-    else
-      IO.println "SDL cloned successfully"
-      IO.println sdlClone.stdout
+  ensureVendor "SDL" sdlVersion
+  ensureVendor "SDL_image" sdlImageVersion
+  let sdlBuild := pkg.buildDir / "vendor" / "SDL"
+  let imageBuild := pkg.buildDir / "vendor" / "SDL_image"
+  configure "vendor/SDL" sdlBuild #["-DSDL_TESTS=OFF", "-DSDL_EXAMPLES=OFF"]
+  let jobs := (← IO.getEnv "CMAKE_BUILD_PARALLEL_LEVEL").getD "4"
+  checked "cmake" #["--build", sdlBuild.toString, "--config", "Release", "--parallel", jobs]
+  configure "vendor/SDL_image" imageBuild #[s!"-DSDL3_DIR={((← IO.currentDir) / sdlBuild).normalize}",
+    "-DSDLIMAGE_SAMPLES=OFF", "-DSDLIMAGE_TESTS=OFF"]
+  checked "cmake" #["--build", imageBuild.toString, "--config", "Release", "--parallel", jobs]
 
-  let sdlImageExists ← System.FilePath.pathExists sdlImageRepoDir
-  if !sdlImageExists then
-    IO.println "Cloning SDL_image"
-    let sdlImageClone ← IO.Process.output { cmd := "git", args := #["clone", "-b", sdlBranch, "--single-branch", "--depth", "1", "--recursive", sdlImageGitRepo, sdlImageRepoDir] }
-    if sdlImageClone.exitCode != 0 then
-      IO.println s!"Error cloning SDL_image: {sdlImageClone.stderr}"
-    else
-      IO.println "SDL_image cloned successfully"
-      IO.println sdlImageClone.stdout
-
--- Build the repos with cmake
--- SDL itself needs to be built before SDL_image, as the latter depends on the former
--- We also need to make sure we are using a system provided C compiler, as the one that comes with Lean is missing important headers
-  IO.println "Building SDL"
--- Create build directory if it doesn't exist
-  let sdlBuildDirExists ← System.FilePath.pathExists (sdlRepoDir ++ "/build")
-  if !sdlBuildDirExists then
-    let configureSdlBuild ← IO.Process.output { cmd := "cmake", args := #["-S", sdlRepoDir, "-B", sdlRepoDir ++ "/build", "-DBUILD_SHARED_LIBS=ON", "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_C_COMPILER=cc"] }
-    if configureSdlBuild.exitCode != 0 then
-      IO.println s!"Error configuring SDL: {configureSdlBuild.stderr}"
-    else
-      IO.println "SDL configured successfully"
-      IO.println configureSdlBuild.stdout
-  else
-    IO.println "SDL build directory already exists, skipping configuration step"
--- now actually build SDL once we've configured it
-  let buildSdl ← IO.Process.output { cmd := "cmake", args :=  #["--build", sdlRepoDir ++ "/build", "--config", "Release",] }
-  if buildSdl.exitCode != 0 then
-    IO.println s!"Error building SDL: {buildSdl.exitCode}"
-    IO.println buildSdl.stderr
-  else
-    IO.println "SDL built successfully"
-    IO.println buildSdl.stdout
--- Build SDL_Image
-  IO.println "Building SDL_image"
--- Create SDL_Image build directory if it doesn't exist
-  let sdlImageBuildDirExists ← System.FilePath.pathExists (sdlImageRepoDir ++ "/build")
-  if !sdlImageBuildDirExists then
-    let currentDir ← IO.currentDir
-    let sdlConfigPath := currentDir / sdlRepoDir / "build"
-    let configureSdlImageBuild ← IO.Process.output { cmd := "cmake", args :=  #["-S", sdlImageRepoDir, "-B", sdlImageRepoDir ++ "/build", s!"-DSDL3_DIR={sdlConfigPath}", "-DBUILD_SHARED_LIBS=ON", "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_C_COMPILER=cc"] }
-    if configureSdlImageBuild.exitCode != 0 then
-      IO.println s!"Error configuring SDL_image: {configureSdlImageBuild.stderr}"
-    else
-      IO.println "SDL_image configured successfully"
-      IO.println configureSdlImageBuild.stdout
-  else
-    IO.println "SDL_image build directory already exists, skipping configuration step"
--- now actually build SDL_image once we've configured it
-  let buildSdlImage ← IO.Process.output { cmd := "cmake", args := #["--build", sdlImageRepoDir ++ "/build", "--config", "Release"] }
-  if buildSdlImage.exitCode != 0 then
-    IO.println s!"Error building SDL_image: {buildSdlImage.stderr}"
-  else
-    IO.println "SDL_image built successfully"
-    IO.println buildSdlImage.stdout
-
-  let sdlO ← sdl.o.fetch
-  let name := nameToStaticLib "leansdl"
-  -- manually copy the DLLs we need to .lake/build/bin/ for the game to work
-  IO.FS.createDirAll ".lake/build/bin/"
-  let dstDir := ".lake/build/bin/"
-  let sdlBinariesDir : FilePath := "vendor/SDL/build/"
-  for entry in (← sdlBinariesDir.readDir) do
-    if entry.path.extension != none then
-      copyFile entry.path (dstDir / entry.path.fileName.get!)
-  let sdlImageBinariesDir : FilePath := "vendor/SDL_image/build/"
-  for entry in (← sdlImageBinariesDir.readDir) do
-    if entry.path.extension != none then
-      copyFile entry.path (dstDir / entry.path.fileName.get!)
+  let src ← sdl.c.fetch
+  let header ← sdl_abi.h.fetch
+  let leanInclude := (← getLeanIncludeDir).toString
+  let object ← buildO (pkg.buildDir / "c" / "sdl.o") src #["-include", "c/sdl_abi.h"]
+    #["-fPIC", "-Wall", "-Wextra", "-Werror", "-Ivendor/SDL/include", "-Ivendor/SDL_image/include", s!"-I{leanInclude}"] "cc" (do let _ ← header.await; pure header.getTrace)
+  IO.FS.createDirAll pkg.binDir
+  let names := if Platform.isWindows then #["SDL3.dll", "SDL3_image.dll"]
+    else if Platform.isOSX then #["libSDL3.0.dylib", "libSDL3_image.0.dylib"]
+    else #["libSDL3.so.0", "libSDL3_image.so.0"]
+  for (dir, name) in #[sdlBuild, imageBuild].zip names do
+    copyFile (dir / name) (pkg.binDir / name)
   if Platform.isWindows then
-    -- binaries for Lean/Lake itself for the executable to run standalone
-    let lakeBinariesDir := (← IO.appPath).parent.get!
-    println! "Copying Lake DLLs from {lakeBinariesDir}"
-
-    for entry in (← lakeBinariesDir.readDir) do
-      if entry.path.extension == some "dll" then
-       copyFile entry.path (".lake/build/bin/" / entry.path.fileName.get!)
-  else
-  -- binaries for Lean/Lake itself, like libgmp are on a different place on Linux
-    let lakeBinariesDir := (← IO.appPath).parent.get!.parent.get! / "lib"
-    println! "Copying Lake binaries from {lakeBinariesDir}"
-
-    for entry in (← lakeBinariesDir.readDir) do
-      if entry.path.extension != none then
-       copyFile entry.path (".lake/build/bin/" / entry.path.fileName.get!)
-
-  buildStaticLib (pkg.staticLibDir / name) #[sdlO]
+    for entry in (← (← IO.appPath).parent.get!.readDir) do
+      if entry.path.extension == some "dll" then copyFile entry.path (pkg.binDir / entry.path.fileName.get!)
+  buildStaticLib (pkg.staticLibDir / nameToStaticLib "leansdl") #[object]
 
 lean_lib SDL where
   moreLinkObjs := #[libleansdl]
-  moreLinkArgs := #["-lSDL3", "-lSDL3_image"]
 
 lean_lib Engine
+
+def nativeLinkArgs : Array String :=
+  if Platform.isWindows then #[".lake/build/vendor/SDL/SDL3.dll", ".lake/build/vendor/SDL_image/SDL3_image.dll"]
+  else if Platform.isOSX then #[".lake/build/vendor/SDL/libSDL3.dylib", ".lake/build/vendor/SDL_image/libSDL3_image.dylib", "-Wl,-rpath,@executable_path"]
+  else #[".lake/build/vendor/SDL/libSDL3.so", ".lake/build/vendor/SDL_image/libSDL3_image.so", "-Wl,--allow-shlib-undefined", "-Wl,-rpath,$ORIGIN"]
 
 @[default_target]
 lean_exe LeanDoomed where
   root := `Main
-  -- we have to add the rpath to tell the compiler where all of the libraries are
-  moreLinkArgs := if Platform.isWindows then
-    #["vendor/SDL/build/SDL3.dll", "vendor/SDL_image/build/SDL3_image.dll"]
-  else
-    #["vendor/SDL/build/libSDL3.so", "vendor/SDL_image/build/libSDL3_image.so", "-Wl,--allow-shlib-undefined", "-Wl,-rpath=$ORIGIN", "-Wl,-rpath=$ORIGIN"]
+  moreLinkArgs := nativeLinkArgs
+
+lean_exe doomed_tests where
+  root := `Tests
+  moreLinkArgs := nativeLinkArgs

@@ -72,6 +72,23 @@ opaque destroyTexture (texture : @& Texture) : IO Unit
 opaque renderTextureColumn (renderer : @& Renderer) (texture : @& Texture)
   (dstX dstY dstH srcX srcYStart srcYEnd : Int32) : IO Unit
 
+-- Scalar field order is checked against generated C in tests/check_abi.py.
+structure DrawColumn where
+  x : Int32
+  y : Int32
+  height : Int32
+  texX : Int32
+  texYStart : Int32
+  texYEnd : Int32
+  shade : UInt8
+
+@[extern "sdl_render_columns"]
+opaque renderColumns (renderer : @& Renderer) (texture : @& Option Texture)
+  (columns : @& Array DrawColumn) (screenHeight : Int32) : IO Unit
+
+@[extern "sdl_pixel_hash"]
+opaque pixelHash (renderer : @& Renderer) : IO UInt64
+
 -- Input and timing
 @[extern "sdl_poll_event"]
 opaque pollEvent : IO UInt32
